@@ -9,6 +9,14 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 INPUT_DIR="${REPO_ROOT}/model/Llama-2-7b"
 OUTPUT_DIR="${REPO_ROOT}/model/Llama-2-7b-hf"
 
+# Flatten layout: transformers' convert_llama_weights_to_hf (v4.44.x) expects
+# consolidated.00.pth + params.json at the root of input_dir, not inside a 7B/ subdir.
+if [ -d "${INPUT_DIR}/7B" ] && [ ! -f "${INPUT_DIR}/consolidated.00.pth" ]; then
+  echo "[convert] flattening 7B/ subdir into root"
+  mv "${INPUT_DIR}/7B/"* "${INPUT_DIR}/"
+  rmdir "${INPUT_DIR}/7B"
+fi
+
 # Try transformers' built-in conversion script first (available in transformers 4.x).
 if python -c "import transformers.models.llama.convert_llama_weights_to_hf" 2>/dev/null; then
   echo "[convert] using transformers built-in conversion script"
