@@ -3,6 +3,11 @@
 Run from the repo root:
     python scripts/train.py
 """
+import os
+# Force single-GPU training (A6000 49GB is plenty for Llama-2-7B + LoRA in bf16).
+# Multi-GPU with device_map="auto" + Trainer caused CUDA label-mismatch errors.
+os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
+
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -96,7 +101,7 @@ def main():
     model = AutoModelForCausalLM.from_pretrained(
         model_path,
         torch_dtype=torch_dtype,
-        device_map="auto",
+        device_map={"": 0},
     )
     model.config.pad_token_id = tokenizer.pad_token_id
     model.config.use_cache = False
