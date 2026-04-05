@@ -17,8 +17,26 @@ def main():
     train_ratio = cfg["train_ratio"]
     seed = cfg["seed"]
 
-    data = json.loads(data_path.read_text())
-    print(f"loaded {len(data)} samples from {data_path}")
+    raw = json.loads(data_path.read_text())
+    print(f"loaded {len(raw)} samples from {data_path}")
+
+    # Deduplicate by question text, keeping first occurrence.
+    # The original dataset has 17 duplicated question texts (34 rows):
+    #   - 11 are exact duplicates (same question + same answer)
+    #   - 6 have the same question but slightly different answer strings
+    #     (e.g. 'cecum' vs 'the cecum', 'atoms' vs 'atom', 'haploid' vs 'haploid life cycle')
+    # We keep only the first occurrence to guarantee train/val share no question text.
+    seen = set()
+    data = []
+    dropped = 0
+    for row in raw:
+        q = row["question"]
+        if q in seen:
+            dropped += 1
+            continue
+        seen.add(q)
+        data.append(row)
+    print(f"deduplicated: dropped {dropped} rows, kept {len(data)} unique questions")
 
     rng = random.Random(seed)
     indices = list(range(len(data)))
