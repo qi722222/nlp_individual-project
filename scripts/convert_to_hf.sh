@@ -26,7 +26,7 @@ else
     echo "[convert] ERROR: could not download conversion script" >&2
     exit 1
   fi
-  python "${SCRIPT_PATH}" --input_dir "${INPUT_DIR}" --model_size 7B --output_dir "${OUTPUT_DIR}"
+  python "${SCRIPT_PATH}" --input_dir "${INPUT_DIR}" --model_size 7B --output_dir "${OUTPUT_DIR}" --llama_version 2
 fi
 
 echo "[convert] done. Files:"
