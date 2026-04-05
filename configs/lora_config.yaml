@@ -1,0 +1,44 @@
+# LoRA + training hyperparameters
+# All paths are relative to the repo root.
+
+# Paths
+model_path: ./model/Llama-2-7b
+data_path: ./data/dataset.json
+train_path: ./data/train.json
+val_path: ./data/val.json
+output_dir: ./output
+
+# Data split
+train_ratio: 0.9        # 4500 train / 500 val out of 5000
+seed: 42
+
+# LoRA hyperparameters
+lora_r: 8
+lora_alpha: 16
+lora_dropout: 0.05
+lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+
+# Training hyperparameters
+num_train_epochs: 3
+per_device_train_batch_size: 4
+per_device_eval_batch_size: 8
+gradient_accumulation_steps: 4    # effective batch size = 16
+learning_rate: 2.0e-4
+weight_decay: 0.0
+warmup_ratio: 0.03
+lr_scheduler_type: cosine
+bf16: true
+fp16: false
+max_seq_length: 256
+logging_steps: 10
+eval_steps: 50
+save_steps: 100
+save_total_limit: 2
+
+# Generation (for accuracy evaluation)
+max_new_tokens: 32
+do_sample: false
