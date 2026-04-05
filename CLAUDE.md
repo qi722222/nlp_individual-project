@@ -100,6 +100,29 @@ User is Claude's eyes/hands on the VM. Paste verbatim output (error tracebacks, 
 
 ---
 
+## 6. Claude Operating Rules
+
+### 6.1 Shell commands: always single-line
+When giving the user shell commands to run on the VM (or locally), **always write each command as a single line**. Do NOT use backslash (`\`) line continuations, even for long commands. The user's terminal / SSH session breaks backslash-continued commands — the second line gets interpreted as a separate command and fails.
+
+**Wrong:**
+```
+python script.py \
+    --input_dir /path/a \
+    --output_dir /path/b
+```
+
+**Right:**
+```
+python script.py --input_dir /path/a --output_dir /path/b
+```
+
+This applies to `wget`, `curl`, `python`, `pip`, `git`, and all other commands. If a command is long, it stays long on one line.
+
+**Additionally:** if a command exceeds ~80 characters, the terminal visually wraps it and the user's copy-paste re-inserts newlines mid-command. There is no shell character that prevents this. The fix is to **put long commands into a script file in `scripts/`**, commit + push, and give the user a short command like `bash scripts/foo.sh` or `python scripts/foo.py` to run. Never give the user multi-argument `python -c "..."` one-liners or long URL commands to paste.
+
+---
+
 ## Checklist Before Submission
 - [ ] Dataset split into train/val
 - [ ] LoRA fine-tuning implemented via PEFT
