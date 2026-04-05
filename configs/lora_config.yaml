@@ -2,7 +2,7 @@
 # All paths are relative to the repo root.
 
 # Paths
-model_path: ./model/Llama-2-7b
+model_path: ./model/Llama-2-7b-hf
 data_path: ./data/dataset.json
 train_path: ./data/train.json
 val_path: ./data/val.json
