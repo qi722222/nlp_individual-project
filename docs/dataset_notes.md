@@ -7,7 +7,21 @@ The provided dataset (`data/dataset.json`) contains **5000 science QA samples**.
 
 Of the 17 duplicated question texts:
 
-**11 groups are exact duplicates** (identical question + identical answer). These are likely artifacts of the data collection process (e.g., the same source paragraph scraped twice).
+**11 groups are exact duplicates** (identical question + identical answer). These are likely artifacts of the data collection process (e.g., the same source paragraph scraped twice):
+
+| Row pair | Question (abbreviated) | Answer (both rows) |
+|---|---|---|
+| 26 / 3496 | Generating electric current with a magnetic field | `electromagnetic induction` |
+| 90 / 4341 | Largest artery in the body | `aorta` |
+| 140 / 3086 | First stage of cellular respiration | `glycolysis` |
+| 506 / 4942 | Aging: cells lose their ability to do what | `divide` |
+| 571 / 1078 | Used to write nuclear equations for radioactive decay | `nuclear symbols` |
+| 1106 / 3685 | Plants release water vapor through their leaves | `transpiration` |
+| 1221 / 3362 | In vascular plants, the sporophyte generation is what | `dominant` |
+| 1456 / 3014 | Stage of life when a child becomes sexually mature | `puberty` |
+| 1631 / 4187 | Most numerous and diverse biochemical compounds | `proteins` |
+| 1903 / 3885 | Tiny sacs in the lungs where gas exchange takes place | `alveoli` |
+| 3662 / 3773 | Maintaining a high metabolic rate takes a lot of what | `energy` |
 
 **6 groups share the same question but have minor answer variations** — these appear to be different annotator phrasings of the same answer:
 
