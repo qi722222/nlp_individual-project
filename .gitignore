@@ -34,4 +34,5 @@ env/
 *.log
 logs/
 *.png
+!docs/**/*.png
 !docs/*.png

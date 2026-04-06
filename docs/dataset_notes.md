@@ -81,6 +81,10 @@ If we did not deduplicate and split by index, a duplicated question could land i
 | Final val loss | ~0.75 |
 | Training time | 13 min 34 sec (840 steps, single A6000 49GB) |
 
+### Loss Curve
+
+![Round 1 Loss Curves](round1_loss_curves.png)
+
 ### Loss Curve Analysis
 
 The training loss decreased steadily from 4.6 to ~0.25 over 840 steps (3 epochs). However, the validation loss plateaued at ~0.65 by step 150–200 (end of epoch 1) and began gradually increasing afterward, reaching ~0.75 by the end of training. This indicates **overfitting after approximately 1 epoch** — the model continued memorizing training examples without improving generalization.
