@@ -26,6 +26,7 @@ from transformers import (
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 PROMPT_TEMPLATE = "Question: {question}\nAnswer:"
+ANSWER_TEMPLATE = " The answer is {answer}."
 IGNORE_INDEX = -100
 
 
@@ -35,8 +36,8 @@ def load_cfg() -> dict:
 
 def build_example(example: Dict[str, str], tokenizer, max_len: int) -> Dict[str, list]:
     """Tokenize a single (question, answer) example for causal LM with loss masked on the prompt."""
-    prompt = PROMPT_TEMPLATE.format(question=example["question"]) + " "
-    answer = example["correct_answer"] + tokenizer.eos_token
+    prompt = PROMPT_TEMPLATE.format(question=example["question"])
+    answer = ANSWER_TEMPLATE.format(answer=example["correct_answer"]) + tokenizer.eos_token
 
     prompt_ids = tokenizer(prompt, add_special_tokens=False)["input_ids"]
     answer_ids = tokenizer(answer, add_special_tokens=False)["input_ids"]
