@@ -32,7 +32,7 @@ def generate_answers(model, tokenizer, rows, max_new_tokens, batch_size=8):
     outputs = []
     for start in tqdm(range(0, len(rows), batch_size), desc="generate"):
         batch = rows[start : start + batch_size]
-        prompts = [PROMPT_TEMPLATE.format(question=r["question"]) for r in batch]
+        prompts = [PROMPT_TEMPLATE.format(question=r["question"]) + " " for r in batch]
         enc = tokenizer(prompts, return_tensors="pt", padding=True, truncation=True, max_length=256).to(device)
         with torch.no_grad():
             gen = model.generate(
