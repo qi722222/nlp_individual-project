@@ -6,6 +6,9 @@ Accuracy definition (per course spec):
 Run from the repo root:
     python scripts/evaluate.py
 """
+import os
+os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
+
 import json
 from pathlib import Path
 
@@ -69,7 +72,7 @@ def main():
     print(f"[eval] loading base model from {model_path}")
     torch_dtype = torch.bfloat16 if cfg["bf16"] else (torch.float16 if cfg["fp16"] else torch.float32)
     base = AutoModelForCausalLM.from_pretrained(
-        model_path, torch_dtype=torch_dtype, device_map="auto"
+        model_path, torch_dtype=torch_dtype, device_map={"": 0}
     )
     base.config.pad_token_id = tokenizer.pad_token_id
 
