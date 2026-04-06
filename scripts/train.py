@@ -19,6 +19,7 @@ from peft import LoraConfig, TaskType, get_peft_model
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
+    EarlyStoppingCallback,
     Trainer,
     TrainingArguments,
 )
@@ -153,6 +154,7 @@ def main():
         train_dataset=train_ds,
         eval_dataset=val_ds,
         data_collator=PadCollator(pad_token_id=tokenizer.pad_token_id),
+        callbacks=[EarlyStoppingCallback(early_stopping_patience=3)],
     )
 
     print("[train] starting training ...")

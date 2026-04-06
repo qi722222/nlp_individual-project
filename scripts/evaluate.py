@@ -49,12 +49,48 @@ def generate_answers(model, tokenizer, rows, max_new_tokens, batch_size=8):
     return outputs
 
 
+def strip_filler(text: str) -> str:
+    """Remove common filler words like 'the', 'a', 'an' from start of answer."""
+    text = text.strip().lower()
+    for prefix in ("the answer is ", "the ", "a ", "an "):
+        if text.startswith(prefix):
+            text = text[len(prefix):]
+    text = text.rstrip(".")
+    return text.strip()
+
+
 def compute_accuracy(rows, generations):
-    correct = 0
+    """Bidirectional substring matching.
+
+    Strict:  gold in pred  (e.g. gold='amino', pred='amino acids' → True)
+    Relaxed: pred_core in gold  (e.g. gold='electric charge', pred='charge' → True)
+
+    Reports both so we can see the range.
+    """
+    strict_correct = 0
+    relaxed_correct = 0
     for row, gen in zip(rows, generations):
-        if row["correct_answer"].strip().lower() in gen.strip().lower():
-            correct += 1
-    return correct / len(rows), correct
+        gold = row["correct_answer"].strip().lower()
+        pred = gen.strip().lower()
+        pred_core = strip_filler(pred)
+
+        # Strict: gold appears in prediction
+        strict_hit = gold in pred
+        # Relaxed: also accept if prediction core appears in gold
+        relaxed_hit = strict_hit or (len(pred_core) >= 2 and pred_core in gold)
+
+        if strict_hit:
+            strict_correct += 1
+        if relaxed_hit:
+            relaxed_correct += 1
+
+    return {
+        "strict_accuracy": strict_correct / len(rows),
+        "strict_correct": strict_correct,
+        "relaxed_accuracy": relaxed_correct / len(rows),
+        "relaxed_correct": relaxed_correct,
+        "total": len(rows),
+    }
 
 
 def main():
@@ -87,19 +123,23 @@ def main():
 
     print(f"[eval] generating on val ({len(val_rows)}) ...")
     val_gens = generate_answers(model, tokenizer, val_rows, max_new_tokens, bs)
-    val_acc, val_correct = compute_accuracy(val_rows, val_gens)
+    val_metrics = compute_accuracy(val_rows, val_gens)
 
     print(f"[eval] generating on train ({len(train_rows)}) ...")
     train_gens = generate_answers(model, tokenizer, train_rows, max_new_tokens, bs)
-    train_acc, train_correct = compute_accuracy(train_rows, train_gens)
+    train_metrics = compute_accuracy(train_rows, train_gens)
 
     result = {
-        "train_accuracy": train_acc,
-        "train_correct": train_correct,
-        "train_total": len(train_rows),
-        "val_accuracy": val_acc,
-        "val_correct": val_correct,
-        "val_total": len(val_rows),
+        "train_strict_accuracy": train_metrics["strict_accuracy"],
+        "train_relaxed_accuracy": train_metrics["relaxed_accuracy"],
+        "train_strict_correct": train_metrics["strict_correct"],
+        "train_relaxed_correct": train_metrics["relaxed_correct"],
+        "train_total": train_metrics["total"],
+        "val_strict_accuracy": val_metrics["strict_accuracy"],
+        "val_relaxed_accuracy": val_metrics["relaxed_accuracy"],
+        "val_strict_correct": val_metrics["strict_correct"],
+        "val_relaxed_correct": val_metrics["relaxed_correct"],
+        "val_total": val_metrics["total"],
     }
     print("=" * 50)
     print(json.dumps(result, indent=2))
