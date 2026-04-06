@@ -124,7 +124,7 @@ Based on the loss curves and error analysis, four improvements are identified fo
 
 ## Round 2 — Prompt Template + Regularization
 
-### Changes from Round 1
+### Changes from Round 1-为了减少过拟合并同时保持学习成果
 
 | Parameter | Round 1 | Round 2 |
 |---|---|---|
@@ -198,69 +198,120 @@ Three distinct error modes remain:
 
 ---
 
-# Proposed Next Steps — Round 3
+## Round 3 — Larger Rank + Early Stopping
 
-## My Understanding of the Current Situation
+### Motivation
 
-After two rounds of training, the model's generation quality is good (val loss 0.325, no overfitting), but the **accuracy metric is the bottleneck**. The model knows roughly the right answer ~60–65% of the time, but ~10–15% of those are marked wrong by the strict substring check because the model phrases the answer differently from the gold label.
+Round 2 showed that val loss had plateaued at ~0.325 with no overfitting, suggesting room for more training. Two hypotheses:
+1. **More trainable parameters** (higher LoRA rank) could help the model memorize more precise answer phrasings.
+2. **More epochs** with early stopping could safely extract additional learning without overfitting.
 
-To push accuracy higher, we need to attack two fronts simultaneously:
-1. **Metric side**: Make the accuracy measurement more faithfully capture what the model actually knows, while staying within the course spec.
-2. **Model side**: Give the model more capacity / data exposure so it learns the exact gold answer phrasing.
+Additionally, we introduced **bidirectional substring matching** in the evaluation script (Change A) to measure the model's "true" accuracy — cases where the model's answer is semantically correct but fails the strict `gold in pred` check because the prediction is shorter than the gold label (e.g., pred `charge` vs gold `electric charge`).
 
-## Proposed Changes for Round 3
-
-### Change A — Smarter evaluation matching (no retraining needed)
-
-The course spec says: *"the number of times a correct answer appearing in the generated response"*. Currently we check `gold in pred`. We can additionally check `pred_core in gold` (bidirectional substring), which captures cases like:
-- pred `charge`, gold `electric charge` → `charge` in `electric charge` ✅
-- pred `warning`, gold `warning predators` → `warning` in `warning predators` ✅
-
-This is still *"correct answer appearing in the generated response"* — just checking in both directions. This alone could recover 10–15% accuracy on val.
-
-**Risk:** The instructor's test-time evaluation may use strict `gold in pred` only. If so, this only helps our self-evaluation, not the final score. We should optimize for the model to produce answers that pass the strict check too.
-
-### Change B — Increase training epochs to 3 + early stopping
-
-Round 2's val loss was flat at 0.325 through all of epoch 2 — there is headroom to train longer without overfitting. Adding a third epoch with early stopping (patience=3 on eval_loss) lets the model see more data without risk.
-
-| Parameter | Round 2 | Round 3 |
-|---|---|---|
-| Epochs | 2 | **3** |
-| Early stopping | none | **patience=3 on eval_loss** |
-
-### Change C — Increase LoRA rank to 32
-
-More trainable parameters → better capacity to memorize exact answer phrasings.
+### Changes from Round 2
 
 | Parameter | Round 2 | Round 3 |
 |---|---|---|
 | LoRA rank (r) | 16 | **32** |
 | LoRA alpha | 32 | **64** |
-| Trainable params | 16.8M (0.25%) | ~33.6M (0.50%) |
+| Trainable params | 16.8M (0.25%) | **~33.6M (0.50%)** |
+| Epochs | 2 | **3 (with early stopping patience=3)** |
+| Prompt template | `The answer is {a}.<eos>` | `The answer is {a}.<eos>` (unchanged) |
+| LR / dropout / batch | unchanged | unchanged |
+| Evaluation | strict only | **strict + relaxed (bidirectional substring)** |
 
-### Change D — Remove "The answer is" template, go back to bare answers
+### Hyperparameters
 
-Counter-intuitive, but: `The answer is` adds tokens that don't help accuracy. Going back to bare answers but with the better regularization (dropout=0.1, lr=1e-4) and higher rank (r=32) may let the model produce more precise answers without the format overhead. The model generates shorter text → each token matters more → less room for the model to rephrase.
+| Parameter | Value |
+|---|---|
+| LoRA rank (r) | 32 |
+| LoRA alpha | 64 |
+| LoRA dropout | 0.1 |
+| Target modules | q_proj, k_proj, v_proj, o_proj |
+| Trainable params | ~33,554,432 (0.50% of 6.74B) |
+| Epochs | 3 (early stopping patience=3 on eval_loss) |
+| Learning rate | 1e-4 |
+| LR scheduler | cosine |
+| Warmup ratio | 0.03 |
+| Effective batch size | 16 (per_device=4 × grad_accum=4) |
+| Precision | bf16 |
+| Max seq length | 256 |
+| Prompt template | `Question: {q}\nAnswer: The answer is {a}.<eos>` |
 
-| Parameter | Round 2 | Round 3 |
+### Results
+
+| Metric | Round 1 | Round 2 | Round 3 |
+|---|---|---|---|
+| Val strict accuracy | 49.5% | 51.1% | **52.7%** |
+| Val relaxed accuracy | — | 59.1% | **60.5%** |
+| Train strict accuracy | 62.1% | 61.3% | **66.6%** |
+| Train relaxed accuracy | — | 69.9% | **75.5%** |
+| Best val loss | 0.65 | 0.325 | **0.336** |
+| Early stopped at | — | — | **epoch 1.61 (step 450/840)** |
+| Training time | 13m34s | 9m09s | **6m52s** (stopped early) |
+
+### Loss Curve
+
+![Round 3 Loss Curves](round3_loss_curves.png)
+
+### Loss Curve Analysis
+
+1. **Val loss was essentially flat** from step 50 to step 450 (0.34 → 0.336), triggering early stopping at epoch 1.61. The model reached its generalization ceiling within the first epoch — additional training only improved train loss (0.35 → 0.20) without benefiting validation.
+2. **Train/val gap widened slightly** compared to Round 2 (0.20 vs 0.336 in Round 3, compared to 0.27 vs 0.325 in Round 2). The larger LoRA rank (r=32) gave more capacity to memorize training data (train strict 67%), but this did not translate to better generalization.
+3. **Val loss floor is ~0.325–0.336 across Rounds 2 and 3**, regardless of rank (16 vs 32) or epochs (2 vs 3). This suggests the generalization bottleneck is **not** model capacity or training duration, but rather the limited diversity of the 4983-sample training set.
+
+### Error Analysis — Bidirectional Matching Insight
+
+The newly introduced relaxed (bidirectional) evaluation recovered a significant number of "correct" predictions:
+
+| Split | Strict correct | Relaxed correct | Recovered by relaxed | Recovery rate |
+|---|---|---|---|---|
+| Val | 263 (52.7%) | 302 (60.5%) | **39 samples** | +7.8% |
+| Train | 2988 (66.6%) | 3385 (75.5%) | **397 samples** | +8.9% |
+
+This confirms the Round 2 diagnosis: **~8% of all predictions are semantically correct but fail strict substring matching** because the model produces a shorter synonym. Examples from Round 3:
+
+| Gold | Pred | Strict | Relaxed |
+|---|---|---|---|
+| `electric charge` | `The answer is charge.` | ❌ | ✅ (`charge` ⊂ `electric charge`) |
+| `warning predators` | `The answer is warning.` | ❌ | ✅ (`warning` ⊂ `warning predators`) |
+| `oceanic and continental` | `The answer is continental and oceanic.` | ✅ | ✅ (gold ⊂ pred) |
+
+### Diagnosis — Hitting the Ceiling
+
+After three rounds of hyperparameter tuning, the key finding is:
+
+- **Val loss floor**: ~0.325–0.336 (unchanged between Round 2 and 3)
+- **Val strict accuracy ceiling**: ~52–53%
+- **Val relaxed accuracy ceiling**: ~60–61%
+
+Diminishing returns are clear: Round 1→2 gave +1.6% strict, Round 2→3 gave +1.6% strict. Further LoRA hyperparameter tuning is unlikely to break through.
+
+**Remaining hypothesis:** The `The answer is` template adds 4 tokens of overhead to every answer. If the model reverts to bare answers (`{a}<eos>`) while retaining the improved regularization (r=32, dropout=0.1, lr=1e-4), it may produce answers that more closely match the gold label format, improving strict accuracy. This is tested in Round 4.
+
+---
+
+## Round 4 — Bare Answer Template + High Capacity (in progress)
+
+### Motivation
+
+The `The answer is {a}.` template was introduced in Round 2 to encourage longer, more complete answers. However, Rounds 2–3 showed that the model still truncates its core answer (e.g., `charge` instead of `electric charge`) regardless of the template wrapper. Meanwhile, the template adds unnecessary tokens that don't contribute to the substring match.
+
+By reverting to the bare answer format `{a}<eos>` while keeping the improved LoRA configuration from Round 3 (r=32, dropout=0.1, lr=1e-4), we test whether:
+1. The model produces more concise, gold-aligned answers without the template overhead.
+2. Strict accuracy improves because the prediction text is more directly comparable to the gold label.
+
+### Changes from Round 3
+
+| Parameter | Round 3 | Round 4 |
 |---|---|---|
-| Prompt template | `Answer: The answer is {a}.<eos>` | `Answer: {a}<eos>` |
+| Prompt template | `The answer is {a}.<eos>` | **`{a}<eos>`** (reverted to Round 1 style) |
+| Epochs | 3 + early stopping | **2** |
+| LoRA rank (r) | 32 | 32 (unchanged) |
+| LoRA alpha | 64 | 64 (unchanged) |
+| LoRA dropout | 0.1 | 0.1 (unchanged) |
+| Learning rate | 1e-4 | 1e-4 (unchanged) |
 
-### Recommended Round 3 Configuration
+### Results
 
-Combining B + C + D (revert template, more capacity, more epochs):
-
-| Parameter | Round 2 | Round 3 |
-|---|---|---|
-| Prompt template | `The answer is {a}.<eos>` | **`{a}<eos>`** (revert) |
-| Epochs | 2 | **3** |
-| LoRA rank (r) | 16 | **32** |
-| LoRA alpha | 32 | **64** |
-| LoRA dropout | 0.1 | 0.1 (keep) |
-| Learning rate | 1e-4 | 1e-4 (keep) |
-| Early stopping | none | **patience=3 on eval_loss** |
-
-Plus Change A (bidirectional substring) applied to evaluate.py regardless of which training config we use.
-
-**Expected outcome:** Val accuracy 60–70% with bidirectional matching, 55–60% with strict matching.
+*(To be filled after training completes.)*
