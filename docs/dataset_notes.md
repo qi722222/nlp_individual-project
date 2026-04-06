@@ -291,7 +291,7 @@ Diminishing returns are clear: Round 1→2 gave +1.6% strict, Round 2→3 gave +
 
 ---
 
-## Round 4 — Bare Answer Template + High Capacity (in progress)
+## Round 4 — Bare Answer Template + High Capacity
 
 ### Motivation
 
@@ -306,7 +306,7 @@ By reverting to the bare answer format `{a}<eos>` while keeping the improved LoR
 | Parameter | Round 3 | Round 4 |
 |---|---|---|
 | Prompt template | `The answer is {a}.<eos>` | **`{a}<eos>`** (reverted to Round 1 style) |
-| Epochs | 3 + early stopping | **2** |
+| Epochs | 3 + early stopping | **2 + early stopping** |
 | LoRA rank (r) | 32 | 32 (unchanged) |
 | LoRA alpha | 64 | 64 (unchanged) |
 | LoRA dropout | 0.1 | 0.1 (unchanged) |
@@ -314,4 +314,82 @@ By reverting to the bare answer format `{a}<eos>` while keeping the improved LoR
 
 ### Results
 
-*(To be filled after training completes.)*
+| Metric | Round 3 | Round 4 | Change |
+|---|---|---|---|
+| Val strict accuracy | **52.7%** | 50.9% | **-1.8%** |
+| Val relaxed accuracy | **60.5%** | 58.1% | **-2.4%** |
+| Train strict accuracy | **66.6%** | 64.4% | -2.2% |
+| Train relaxed accuracy | **75.5%** | 73.1% | -2.4% |
+| Best val loss | **0.336** | 0.655 | +95% (much worse) |
+| Early stopped at | epoch 1.61 | epoch 1.61 | same |
+| Training time | 6m52s | 6m48s | similar |
+
+### Loss Curve
+
+![Round 4 Loss Curves](round4_loss_curves.png)
+
+### Loss Curve Analysis
+
+1. **Val loss nearly doubled** from Round 3's 0.336 to 0.655. Removing the `The answer is` template forced the model to predict less predictable tokens (bare answer words have higher entropy than a fixed template prefix), resulting in inherently higher cross-entropy loss.
+2. **The loss curve shape mirrors Round 1** (starting at 4.3, val loss settling at ~0.65), which also used bare answers — but Round 4 benefits from better regularization (dropout=0.1, lr=1e-4) so there is less overfitting than Round 1.
+3. **Early stopping triggered at the same point** (epoch 1.61), confirming that the model reaches its generalization limit quickly regardless of template.
+
+### Conclusion
+
+**Removing the template was detrimental.** The `The answer is` prefix provides a structured, predictable output format that helps the model focus its capacity on the answer content. Without it, the model has to "decide" its own output format from scratch, wasting capacity and producing slightly less accurate answers.
+
+**Round 3 remains the best model** across all metrics.
+
+---
+
+# Overall Summary — Four Rounds of Iterative Improvement
+
+## Cross-Round Comparison
+
+| Metric | Round 1 | Round 2 | Round 3 | Round 4 |
+|---|---|---|---|---|
+| **Val strict accuracy** | 49.5% | 51.1% | **52.7%** | 50.9% |
+| **Val relaxed accuracy** | — | 59.1% | **60.5%** | 58.1% |
+| Train strict accuracy | 62.1% | 61.3% | **66.6%** | 64.4% |
+| Train relaxed accuracy | — | 69.9% | **75.5%** | 73.1% |
+| Best val loss | 0.65 | 0.325 | 0.336 | 0.655 |
+| LoRA rank | 8 | 16 | **32** | 32 |
+| Epochs (actual) | 3 | 2 | 1.61 | 1.61 |
+| Prompt template | bare | "The answer is" | "The answer is" | bare |
+| Overfitting | severe | none | none | none |
+
+## What Each Round Taught Us
+
+### Round 1 → Round 2: Fixing overfitting + prompt engineering
+- **Problem:** Severe overfitting (train loss 0.25, val loss 0.75 — 3x gap)
+- **Fixes:** Reduced LR (2e-4→1e-4), increased dropout (0.05→0.1), reduced epochs (3→2), increased rank (8→16), added `The answer is` template
+- **Result:** Val loss cut in half (0.75→0.325), overfitting eliminated. Val strict accuracy +1.6%.
+- **Lesson:** Regularization was the biggest lever. The template improved loss but not accuracy.
+
+### Round 2 → Round 3: Scaling capacity + early stopping
+- **Problem:** Val loss plateau at 0.325, accuracy ceiling at ~51%
+- **Fixes:** Doubled rank (16→32), added 3rd epoch with early stopping
+- **Result:** Early stopping triggered at epoch 1.61. Train accuracy jumped (+5%), val accuracy only +1.6%.
+- **Lesson:** More parameters help memorize training data but don't improve generalization on this small dataset. The val loss floor (~0.33) is a hard ceiling.
+
+### Round 3 → Round 4: Template ablation study
+- **Problem:** Does the `The answer is` template help or hurt?
+- **Fix:** Removed template, kept all other Round 3 settings
+- **Result:** All metrics dropped. Val strict -1.8%, val loss nearly doubled.
+- **Lesson:** The template is beneficial — it provides a structured output format that helps the model focus capacity on the answer content rather than output formatting.
+
+## Final Model Selection
+
+**Round 3 is selected as the final submission model**, with the following characteristics:
+- LoRA rank=32, alpha=64, dropout=0.1
+- Prompt: `Question: {q}\nAnswer: The answer is {a}.<eos>`
+- Val strict accuracy: **52.7%** | Val relaxed accuracy: **60.5%**
+- No overfitting (train/val gap ~0.14)
+- Early stopped at epoch 1.61 for optimal generalization
+
+## Key Findings
+
+1. **Regularization matters most.** The single biggest improvement came from fixing overfitting (Round 1→2), not from scaling model capacity.
+2. **Prompt template matters.** The `The answer is` prefix reduced val loss by 50% and slightly improved accuracy by providing a predictable output structure.
+3. **Dataset size is the bottleneck.** With only 4983 unique samples, the model reaches its generalization ceiling within ~1.5 epochs. Further hyperparameter tuning yields diminishing returns.
+4. **Strict accuracy underestimates the model.** Bidirectional substring matching recovers ~8% of predictions that are semantically correct but formatted differently from the gold label (e.g., `charge` vs `electric charge`). The model's "true" accuracy is closer to 60% than 53%.
