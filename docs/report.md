@@ -1,4 +1,4 @@
-# Fine-tuning Llama 2-7B with LoRA for Science Question Answering
+# Fine-tuning Llama 2-7B with LoRA
 
 **Student:** 50012431 JiaqiLI
 **Course:** AIAA 4051 Introduction to NLP, Spring 2026
@@ -43,7 +43,7 @@ I verified that no question text appears in both splits (overlap = 0).
 
 ### 3.1 Base Model
 
-I used the Llama 2-7B base model (6.74 billion parameters), downloaded from ModelScope. The original Meta-format weights (`consolidated.00.pth`) were converted to HuggingFace format using the `convert_llama_weights_to_hf` script from the transformers library (v4.44.2).
+I used the Llama 2-7B base model, downloaded from ModelScope.
 
 ### 3.2 LoRA Configuration
 
@@ -61,7 +61,6 @@ All training was conducted on a single NVIDIA RTX A6000 GPU (48GB VRAM) with the
 
 | Parameter | Value |
 |---|---|
-| Precision | bf16 |
 | LR scheduler | cosine with warmup |
 | Warmup ratio | 0.03 |
 | Weight decay | 0.0 |
@@ -69,7 +68,6 @@ All training was conducted on a single NVIDIA RTX A6000 GPU (48GB VRAM) with the
 | Gradient accumulation steps | 4 |
 | Effective batch size | 16 |
 | Max sequence length | 256 |
-| Optimizer | AdamW (default) |
 
 ### 3.4 Prompt Template
 
@@ -105,7 +103,7 @@ After training, I loaded the base Llama 2-7B model together with the saved LoRA 
 
 ## 5. Experiments and Results
 
-I conducted four rounds of training, each informed by the analysis of the previous round.
+I conducted 4 rounds of training, each informed by the analysis of the previous round.
 
 ### 5.1 Round 1 — Baseline
 
@@ -136,7 +134,7 @@ I conducted four rounds of training, each informed by the analysis of the previo
 
 **Analysis:**
 
-The training loss decreased steadily from 4.6 to ~0.25, but the validation loss plateaued at ~0.65 by step 200 and then gradually increased to ~0.75. This indicated severe overfitting — the model memorized the training data without improving its ability to generalize to unseen questions.
+The training loss decreased steadily from 4.6 to ~0.25, but the validation loss plateaued at ~0.65 by step 200 and then gradually increased to ~0.75. This indicated severe overfitting.
 
 I also examined the generated answers on the validation set and found that many errors fell into a specific pattern: the model produced a shorter but semantically correct answer that failed the substring check. For example, the model generated `charge` when the gold answer was `electric charge`. Since the metric checks whether the gold answer appears *in* the prediction (not the other way around), a shorter prediction always fails when the gold is longer.
 
@@ -279,12 +277,7 @@ Based on the experiments above, I selected the **Round 3 configuration** as the 
 
 ## 7. Key Takeaways
 
-Through four rounds of iterative experiments, I learned the following:
-
-1. **Regularization is the most impactful lever.** The single biggest improvement came from addressing overfitting (Round 1 → Round 2) by reducing the learning rate, increasing dropout, and limiting the number of epochs. Without proper regularization, a larger model simply memorizes the training set.
-
-2. **Prompt template design matters.** The `The answer is` template reduced validation loss by 50% and slightly improved accuracy by providing a predictable output structure. This was confirmed by the ablation study in Round 4, where removing the template caused all metrics to drop.
-
-3. **Dataset size is the fundamental bottleneck.** With only ~5000 unique samples, the model reaches its generalization ceiling within approximately 1.5 epochs. Further increasing LoRA rank (from 16 to 32) helped train accuracy but barely improved validation accuracy, indicating that the model needs more diverse training data rather than more parameters.
-
-4. **Early stopping is essential for small datasets.** In both Round 3 and Round 4, early stopping prevented unnecessary overfitting by halting training at the point of optimal generalization (epoch 1.61).
+1. **Regularization matters most.** Fixing overfitting (lower LR, higher dropout, fewer epochs) gave the biggest single improvement.
+2. **Prompt template helps.** The `The answer is` format reduced val loss by 50% and improved accuracy, confirmed by the Round 4 ablation.
+3. **Dataset size is the bottleneck.** With ~5000 samples, the model plateaus within ~1.5 epochs. Increasing LoRA rank helped train accuracy but barely improved validation.
+4. **Early stopping prevents waste.** It consistently stopped at epoch 1.61, avoiding unnecessary overfitting on this small dataset.
