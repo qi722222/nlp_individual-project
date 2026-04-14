@@ -26,7 +26,7 @@ from transformers import (
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-PROMPT_TEMPLATE = "Question: {question}\nAnswer:"
+PROMPT_TEMPLATE = "Question: {question} Answer:"
 IGNORE_INDEX = -100
 
 

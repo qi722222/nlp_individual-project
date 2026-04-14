@@ -19,7 +19,7 @@ from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-PROMPT_TEMPLATE = "Question: {question}\nAnswer:"
+PROMPT_TEMPLATE = "Question: {question} Answer:"
 
 
 def load_cfg() -> dict:
