@@ -13,8 +13,8 @@ train_ratio: 0.9        # 4500 train / 500 val out of 5000
 seed: 42
 
 # LoRA hyperparameters
-lora_r: 16
-lora_alpha: 32
+lora_r: 32
+lora_alpha: 64
 lora_dropout: 0.2
 lora_target_modules:
   - q_proj
@@ -39,9 +39,10 @@ fp16: false
 max_seq_length: 256
 logging_steps: 10
 eval_steps: 50
-save_steps: 100
+save_steps: 50
 save_total_limit: 2
 
 # Generation (for accuracy evaluation)
-max_new_tokens: 32
+# Match instructor's test script (16) so our evaluate.py reflects true submission score
+max_new_tokens: 16
 do_sample: false
