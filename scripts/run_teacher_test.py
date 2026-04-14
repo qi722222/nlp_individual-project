@@ -32,6 +32,7 @@ def parse_args():
     p.add_argument("--test_data", default=str(REPO_ROOT / "data" / "val.json"))
     p.add_argument("--out", default=str(REPO_ROOT / "output" / "teacher_test_results.csv"))
     p.add_argument("--max_new_tokens", type=int, default=16)
+    p.add_argument("--use_4bit", action="store_true", help="Use 4bit quant like instructor's script (may fail on some env versions)")
     return p.parse_args()
 
 
@@ -42,22 +43,28 @@ def main():
     print(f"[test] test_data  = {args.test_data}")
     print(f"[test] out        = {args.out}")
 
-    quantization_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.float16,
-        bnb_4bit_use_double_quant=True,
-    )
-
     tokenizer = AutoTokenizer.from_pretrained(args.base_model)
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
 
-    base_model = AutoModelForCausalLM.from_pretrained(
-        args.base_model,
-        quantization_config=quantization_config,
-        device_map={"": 0},
-    )
+    if args.use_4bit:
+        quantization_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_use_double_quant=True,
+        )
+        base_model = AutoModelForCausalLM.from_pretrained(
+            args.base_model,
+            quantization_config=quantization_config,
+            device_map={"": 0},
+        )
+    else:
+        base_model = AutoModelForCausalLM.from_pretrained(
+            args.base_model,
+            torch_dtype=torch.float16,
+            device_map={"": 0},
+        )
     model = PeftModel.from_pretrained(base_model, args.adapter)
     model.eval()
 
