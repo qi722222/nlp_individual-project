@@ -19,42 +19,85 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 train = json.loads((REPO_ROOT / "data" / "train.json").read_text())
 gens = json.loads((REPO_ROOT / "output" / "val_generations.json").read_text())
 
-train_answers = set(r["correct_answer"].lower().strip() for r in train)
+# Three different "seen" definitions — from strictest to loosest
+train_answer_strings = set(r["correct_answer"].lower().strip() for r in train)
+train_answer_words = set()
+for r in train:
+    for w in r["correct_answer"].lower().strip().split():
+        train_answer_words.add(w)
 
-seen, unseen = [], []
+
+def classify(gold: str):
+    """Return one of: 'exact', 'all_words', 'some_words', 'none'."""
+    gold = gold.lower().strip()
+    if gold in train_answer_strings:
+        return "exact"
+    words = gold.split()
+    if all(w in train_answer_words for w in words):
+        return "all_words"
+    if any(w in train_answer_words for w in words):
+        return "some_words"
+    return "none"
+
+
+buckets = {"exact": [], "all_words": [], "some_words": [], "none": []}
 for g in gens:
-    gold = g["gold"].lower().strip()
+    gold = g["gold"]
     pred = g["pred"].lower().strip()
-    correct = gold in pred
-    (seen if gold in train_answers else unseen).append((gold, pred, correct))
+    correct = gold.lower().strip() in pred
+    bucket = classify(gold)
+    buckets[bucket].append((gold, pred, correct))
+
 
 def stats(name, rows, color):
     n = len(rows)
     c = sum(1 for _, _, ok in rows if ok)
     acc = 100 * c / n if n else 0.0
-    print(f"{color}{name:<30} n={n:>4}  correct={c:>4}  acc={acc:>6.2f}%{RESET}")
+    print(f"{color}{name:<40} n={n:>4}  correct={c:>4}  acc={acc:>6.2f}%{RESET}")
     return acc, c, n
 
-print(f"{BOLD}{CYAN}Accuracy split by answer novelty{RESET}")
-print(f"{CYAN}{'-' * 60}{RESET}")
-seen_acc, seen_c, seen_n = stats("seen-in-train (warm)", seen, GREEN)
-unseen_acc, unseen_c, unseen_n = stats("not-in-train (cold)", unseen, YELLOW)
-total_acc, total_c, total_n = stats("overall", seen + unseen, BOLD)
+
+print(f"{BOLD}{CYAN}Val accuracy by answer novelty (stricter -> looser){RESET}")
+print(f"{CYAN}{'-' * 72}{RESET}")
+stats("1. exact: whole answer string seen", buckets["exact"], GREEN)
+stats("2. all-words seen (order may differ)", buckets["all_words"], CYAN)
+stats("3. some-words seen (partial overlap)", buckets["some_words"], YELLOW)
+stats("4. none: no word of gold in any train ans", buckets["none"], RED)
+print()
+total = sum(buckets.values(), [])
+stats("overall", total, BOLD)
+
+# Also compute two reductions:
+#   warm1 = exact only          vs cold1 = everything else
+#   warm2 = exact + all_words   vs cold2 = some_words + none
+print()
+print(f"{BOLD}Collapsed views:{RESET}")
+warm1 = buckets["exact"]
+cold1 = buckets["all_words"] + buckets["some_words"] + buckets["none"]
+stats("  warm1 = exact match", warm1, GREEN)
+stats("  cold1 = anything else", cold1, YELLOW)
+if warm1 and cold1:
+    a1 = 100 * sum(1 for _, _, ok in warm1 if ok) / len(warm1)
+    a2 = 100 * sum(1 for _, _, ok in cold1 if ok) / len(cold1)
+    print(f"  gap: {a1 - a2:+.1f}%")
 
 print()
-if seen_n and unseen_n:
-    gap = seen_acc - unseen_acc
-    gap_color = RED if gap > 20 else YELLOW if gap > 10 else GREEN
-    print(f"{BOLD}Warm vs cold gap:{RESET} {gap_color}{gap:+.1f}%{RESET}")
-    if gap > 20:
-        print(f"{RED}  Large gap -> cold-start samples are the ceiling. Train augmentation would help more than hyperparam tuning.{RESET}")
-    elif gap > 10:
-        print(f"{YELLOW}  Moderate gap -> hyperparam tuning still has some headroom.{RESET}")
-    else:
-        print(f"{GREEN}  Small gap -> both subsets fail similarly; issue is not answer novelty.{RESET}")
+warm2 = buckets["exact"] + buckets["all_words"]
+cold2 = buckets["some_words"] + buckets["none"]
+stats("  warm2 = all words seen (any order)", warm2, GREEN)
+stats("  cold2 = some/no words seen", cold2, YELLOW)
+if warm2 and cold2:
+    a1 = 100 * sum(1 for _, _, ok in warm2 if ok) / len(warm2)
+    a2 = 100 * sum(1 for _, _, ok in cold2 if ok) / len(cold2)
+    print(f"  gap: {a1 - a2:+.1f}%")
 
-# Show a few cold-start misses so we can eyeball if Llama-2 "should" know them
+# Show a few examples from each bucket for eyeballing
 print()
-print(f"{BOLD}Cold-start misses (first 10):{RESET}")
-for gold, pred, ok in [r for r in unseen if not r[2]][:10]:
-    print(f"  gold={gold!r:40s}  pred={pred!r}")
+print(f"{BOLD}Sample misses by bucket:{RESET}")
+for bname, color in [("exact", GREEN), ("all_words", CYAN), ("some_words", YELLOW), ("none", RED)]:
+    misses = [r for r in buckets[bname] if not r[2]]
+    if not misses:
+        continue
+    print(f"\n{color}[{bname}] {len(misses)} misses, sample:{RESET}")
+    for gold, pred, _ in misses[:5]:
+        print(f"  gold={gold!r:40s}  pred={pred!r}")
