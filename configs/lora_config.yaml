@@ -13,8 +13,8 @@ train_ratio: 0.9        # 4500 train / 500 val out of 5000
 seed: 42
 
 # LoRA hyperparameters
-lora_r: 32
-lora_alpha: 64
+lora_r: 16
+lora_alpha: 32
 lora_dropout: 0.2
 lora_target_modules:
   - q_proj
