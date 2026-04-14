@@ -57,7 +57,6 @@ def main():
         args.base_model,
         quantization_config=quantization_config,
         device_map="auto",
-        torch_dtype=torch.float16,
     )
     model = PeftModel.from_pretrained(base_model, args.adapter)
     model.eval()
