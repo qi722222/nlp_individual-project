@@ -56,7 +56,7 @@ def main():
     base_model = AutoModelForCausalLM.from_pretrained(
         args.base_model,
         quantization_config=quantization_config,
-        device_map="auto",
+        device_map={"": 0},
     )
     model = PeftModel.from_pretrained(base_model, args.adapter)
     model.eval()
