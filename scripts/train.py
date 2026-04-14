@@ -35,15 +35,24 @@ def load_cfg() -> dict:
 
 
 def build_example(example: Dict[str, str], tokenizer, max_len: int) -> Dict[str, list]:
-    """Tokenize a single (question, answer) example for causal LM with loss masked on the prompt."""
-    prompt = PROMPT_TEMPLATE.format(question=example["question"]) + " "
-    answer = example["correct_answer"] + tokenizer.eos_token
+    """Tokenize a single (question, answer) example for causal LM with loss masked on the prompt.
 
+    IMPORTANT: tokenize the FULL string in one shot. Tokenizing prompt and answer
+    separately then concatenating produces wrong tokens at the boundary for
+    sentencepiece tokenizers (Llama): a standalone space token gets inserted
+    instead of the correct '▁word' merged token, making training labels diverge
+    from what the model actually produces at inference time.
+    """
+    prompt = PROMPT_TEMPLATE.format(question=example["question"])  # no trailing space
+    full_text = prompt + " " + example["correct_answer"] + tokenizer.eos_token
+
+    full_ids = tokenizer(full_text, add_special_tokens=False)["input_ids"]
     prompt_ids = tokenizer(prompt, add_special_tokens=False)["input_ids"]
-    answer_ids = tokenizer(answer, add_special_tokens=False)["input_ids"]
+    # Sentencepiece prefix property: tokenizing the prompt alone must yield a
+    # prefix of tokenizing the full text. Verified by diag_tokenization.py.
 
-    # Prepend BOS
-    input_ids = [tokenizer.bos_token_id] + prompt_ids + answer_ids
+    input_ids = [tokenizer.bos_token_id] + full_ids
+    answer_ids = full_ids[len(prompt_ids):]
     labels = [IGNORE_INDEX] * (1 + len(prompt_ids)) + answer_ids
 
     # Truncate from the right
